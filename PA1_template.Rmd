@@ -1,25 +1,130 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Peer review"
+output: html_document
 ---
 
+This document is for the first Peer review assignment for the Coursera 'Reproducible Research'  course.
 
-## Loading and preprocessing the data
+It is made in RStudio and Knitted to HTML for review by classmates.
+In this document I use a stepcounter-data file, and analyse its ouput, as required.
+
+The first task is loading in the CSV files:
+
+```{r}
+all_data <- read.csv ("activity.csv")
+```
+
+The first task is calculate the total number of steps per day, discarding any missing values.
+For this, I aggregate on the date, with the function sum, with discard of all NA's (and then plot a histogram):
+
+```{r}
+aggregated_data <- aggregate(all_data$steps, by=list(all_data$date), FUN=sum)
+#Make the histogram:
+hist (aggregated_data$x,
+      main = "Total number of steps per day",
+      xlab = "number of steps",
+      breaks = 10,
+      col = "blue",
+      xlim = c(0, 25000))
+```
 
 
+Next up is the calculation of the mean and median number of steps of all observations:
+```{r}
+mean_steps <- mean(aggregated_data$x, na.rm = TRUE)
+median_steps <- median(aggregated_data$x, na.rm = TRUE)
+mean_steps
+median_steps
+```
 
-## What is mean total number of steps taken per day?
+Then, we're zooming in on the daily pattern. For this, I draw a lineplot of the averages of the day. But first, aggregate on the intervals:
+```{r}
+aggregated_data2 <- aggregate(all_data$steps, by=list(Category=all_data$interval), FUN=mean, na.rm = TRUE)
+#Make the plot:
+plot (aggregated_data2$Category,
+      aggregated_data2$x,
+      main = "Average number of steps per time-interval",
+      type = "l",
+      xlab = "time-interval",
+      ylab = "average number of steps")
+```
+
+Which time-interval is, on average, the one with the max number of steps?
+```{r}
+aggregated_data2$Category[which.max(aggregated_data2$x)]
+```
+
+Let's take a look at the missing values. How many are there?
+```{r}
+sum (is.na(all_data$steps))
+```
+
+Let's try and fill that in. I fill them in on the averages of the intervals, based on the day-of-the-week. We have 60 days, so on average 8,5 'samples' of each day o/t week.
+First, create a new dataset to contain all the data, and add a column for days-of-week.
+```{r}
+filled_in_data <- all_data
+filled_in_data$day <- weekdays(as.Date(filled_in_data$date))
+```
+
+Create a temp set, with all means, based on weekday and interval.
+Because I don't know exactly how many times I should calculate them, I do it in one go.
+It maybe slower, depending on the number of NA-intervals. But if I get it out of the way here, it's more predictable.
+```{r}
+means_set <- temp_aggregate <- aggregate(filled_in_data$steps, by = list (filled_in_data$day, filled_in_data$interval), FUN = mean, na.rm = TRUE)
+```
+
+Then loop through the new setfilled_in_data, and if we find a missing observation, look up the means for that interval in the means_set.
+```{r}
+for (i in 1:nrow(all_data)) {
+    if (is.na(filled_in_data$steps[i])) {
+        #Copy the mean from the mean-set:
+        temp_mean <- subset(means_set, means_set$Group.1 == filled_in_data$day[i] & means_set$Group.2 == filled_in_data$interval[i])
+        #and put it in the filled-in set:
+        filled_in_data$steps[i] = temp_mean$x 
+    }
+}
+```
+
+Then, create a histogram from the filled-in set, through an aggregated set:
+```{r}
+aggregated_data <- aggregate(filled_in_data$steps, by=list(filled_in_data$date), FUN=sum)
+
+hist (aggregated_data$x,
+      main = "Total number of steps per day",
+      xlab = "number of steps",
+      breaks = 10,
+      col = "blue",
+      xlim = c(0, 25000))
+```
+
+Now, calculate the new mean and median, and then the difference:
+```{r}
+mean_steps_filledin <- mean(aggregated_data$x, na.rm = TRUE)
+median_steps_filledin <- median(aggregated_data$x, na.rm = TRUE)
+mean_steps_filledin
+median_steps_filledin
+
+mean_steps_filledin - mean_steps
+median_steps_filledin - median_steps
+```
 
 
+Now, make a weekend/weekday factor variable (add to the filled_in_data):
+```{r}
+weekdaylist <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+filled_in_data$WeekdayOrNot <- c('WeekendDay', 'Weekday')[(filled_in_data$day %in% weekdaylist)+1L]
+```
 
-## What is the average daily activity pattern?
+Aggregate the data on week or weekend:
+```{r}
+aggregated_data <- aggregate(filled_in_data$steps, by=list(filled_in_data$interval, filled_in_data$WeekdayOrNot), FUN=mean)
+```
 
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+And finally, put it into a panel plot
+```{r}
+par(mfrow = c(2,1), mar = c(1.5, 5, 1.5, 2))
+with (aggregated_data[aggregated_data$Group.2 == "Weekday",], plot(Group.1, x, type = 'l', xlab = "Interval", col = "blue", ylab = "Avg no of steps", main="Total steps week vs weekend"))
+legend ("topright", "weekday", text.col = "blue")
+with (aggregated_data[aggregated_data$Group.2 == "WeekendDay",], plot(Group.1, x, type = 'l', xlab = "Interval", col = "red", ylab = "Avg no of steps"))
+legend ("topright", "weekends", text.col = "red")
+```
